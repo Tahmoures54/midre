@@ -1,5 +1,12 @@
-import type { DoseStatus, HistoryRecord, Medication } from "./types";
-import { MAX_HISTORY_RECORDS } from "./types";
+import type { AccentId, DoseStatus, HistoryRecord, Medication } from "./types.ts";
+import { ACCENTS, MAX_HISTORY_RECORDS } from "./types.ts";
+import {
+  inferScheduleKind,
+  intervalSecondsForTimes,
+  nextDoseAfterAction,
+  normalizeTimes,
+  progressDenominator,
+} from "./schedule.ts";
 
 export function trimHistory(history: HistoryRecord[] | undefined): HistoryRecord[] {
   const list = Array.isArray(history) ? history : [];
@@ -40,6 +47,28 @@ export function formatFaDateTime(ts: number): string {
   return sameDay ? `امروز ${time}` : `${date.toLocaleDateString("fa-IR")} ${time}`;
 }
 
+export function formatInterval(seconds: number): string {
+  if (seconds < 3600) {
+    const m = Math.max(1, Math.round(seconds / 60));
+    return `${m} دقیقه`;
+  }
+  const h = seconds / 3600;
+  if (Number.isInteger(h)) return `${h} ساعت`;
+  return `${h.toFixed(1)} ساعت`;
+}
+
+export function formatTimesLabel(times: string[]): string {
+  if (!times.length) return "ساعات مشخص";
+  return times
+    .map((t) => {
+      const [hh, mm] = t.split(":");
+      const d = new Date();
+      d.setHours(Number(hh), Number(mm), 0, 0);
+      return d.toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" });
+    })
+    .join(" · ");
+}
+
 export function intervalFromHours(hours: number): number {
   return Math.max(1, Math.round(hours * 3600));
 }
@@ -59,30 +88,34 @@ export function toDue(m: Medication, now = Date.now()): Medication {
     ...m,
     running: false,
     pendingDose: true,
-    dueScheduledAt: m.nextDoseAt ?? now,
+    dueScheduledAt: m.dueScheduledAt ?? m.nextDoseAt ?? now,
     updatedAt: now,
   };
 }
 
-export function applyTake(m: Medication, now = Date.now()): Medication {
-  const scheduledAt = m.dueScheduledAt ?? m.nextDoseAt;
-  const record: HistoryRecord = {
+function historyTake(m: Medication, now: number, scheduledAt?: number): HistoryRecord {
+  return {
     id: crypto.randomUUID(),
     takenAt: now,
     scheduledAt,
     status: statusFor(now, scheduledAt),
     snoozeCount: m.snoozeCount || 0,
   };
+}
+
+export function applyTake(m: Medication, now = Date.now()): Medication {
+  const scheduledAt = m.dueScheduledAt ?? m.nextDoseAt;
+  const quantity = Math.max(0, m.quantity - 1);
   return {
     ...m,
-    quantity: Math.max(0, m.quantity - 1),
-    history: trimHistory([...(m.history || []), record]),
+    quantity,
+    history: trimHistory([...(m.history || []), historyTake(m, now, scheduledAt)]),
     lastTakenAt: now,
     pendingDose: false,
     dueScheduledAt: undefined,
     snoozeCount: 0,
     running: true,
-    nextDoseAt: now + m.interval * 1000,
+    nextDoseAt: nextDoseAfterAction(m, now),
     updatedAt: now,
   };
 }
@@ -92,7 +125,6 @@ export function applySnooze(m: Medication, minutes = 10, now = Date.now()): Medi
   return {
     ...m,
     pendingDose: false,
-    dueScheduledAt: undefined,
     running: true,
     snoozeCount: (m.snoozeCount || 0) + 1,
     nextDoseAt: now + secs * 1000,
@@ -115,7 +147,7 @@ export function applySkip(m: Medication, now = Date.now()): Medication {
     dueScheduledAt: undefined,
     snoozeCount: 0,
     running: true,
-    nextDoseAt: now + m.interval * 1000,
+    nextDoseAt: nextDoseAfterAction(m, now),
     updatedAt: now,
   };
 }
@@ -137,7 +169,8 @@ export function applyToggle(m: Medication, now = Date.now()): Medication {
     running: true,
     pendingDose: false,
     dueScheduledAt: undefined,
-    nextDoseAt: now + m.interval * 1000,
+    nextDoseAt:
+      m.scheduleKind === "times" && m.times.length > 0 ? nextDoseAfterAction({ ...m, dueScheduledAt: undefined, nextDoseAt: undefined }, now) : now + m.interval * 1000,
     updatedAt: now,
   };
 }
@@ -165,16 +198,45 @@ export function applyReset(m: Medication, now = Date.now()): Medication {
   };
 }
 
+export function applyRefill(m: Medication, add: number, now = Date.now()): Medication {
+  const extra = Math.max(0, Math.round(add));
+  return {
+    ...m,
+    quantity: m.quantity + extra,
+    updatedAt: now,
+  };
+}
+
+function asAccent(value: unknown): AccentId {
+  return ACCENTS.includes(value as AccentId) ? (value as AccentId) : "sage";
+}
+
 export function sanitizeMedication(raw: Partial<Medication> & { name?: string }): Omit<Medication, "id"> & { id?: number } {
-  const interval = Number(raw.interval) || intervalFromHours(Number(raw.intervalHours) || 8);
+  const scheduleKind = inferScheduleKind(raw);
+  const times = scheduleKind === "times" ? normalizeTimes(raw.times) : [];
+  const intervalFromRaw = Number(raw.interval);
+  const hoursRaw = Number(raw.intervalHours);
+  let interval =
+    Number.isFinite(intervalFromRaw) && intervalFromRaw > 0
+      ? intervalFromRaw
+      : intervalFromHours(Number.isFinite(hoursRaw) && hoursRaw > 0 ? hoursRaw : 8);
+  let intervalHours = Number.isFinite(hoursRaw) && hoursRaw > 0 ? hoursRaw : interval / 3600;
+  if (scheduleKind === "times") {
+    interval = intervalSecondsForTimes(times);
+    intervalHours = times.length > 0 ? 24 / times.length : 24;
+  }
   const now = Date.now();
   return {
     id: raw.id,
     name: String(raw.name || "").trim() || "دارو",
     condition: String(raw.condition || "").trim(),
     dosage: String(raw.dosage || "").trim() || "—",
+    notes: String(raw.notes || "").trim(),
+    accent: asAccent(raw.accent),
+    scheduleKind,
     interval,
-    intervalHours: Number(raw.intervalHours) || Math.max(1, Math.round(interval / 3600)),
+    intervalHours,
+    times,
     quantity: Math.max(0, Number(raw.quantity) || 0),
     running: Boolean(raw.running),
     nextDoseAt: raw.nextDoseAt,
@@ -188,8 +250,12 @@ export function sanitizeMedication(raw: Partial<Medication> & { name?: string })
   };
 }
 
+/** @deprecated use onTimeRate — kept so older imports keep compiling. */
 export function adherenceScore(history: HistoryRecord[]): number {
-  if (!history.length) return 0;
-  const onTime = history.filter((h) => h.status === "on-time").length;
-  return Math.round((onTime / history.length) * 100);
+  const taken = history.filter((h) => h.status !== "skipped" && h.status !== "snoozed");
+  if (!taken.length) return 0;
+  const onTime = taken.filter((h) => h.status === "on-time").length;
+  return Math.round((onTime / taken.length) * 100);
 }
+
+export { progressDenominator };

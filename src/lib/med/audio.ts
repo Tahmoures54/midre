@@ -1,3 +1,5 @@
+import { loadSettings } from "./settings";
+
 let audioContext: AudioContext | null = null;
 let oscillator: OscillatorNode | null = null;
 let gainNode: GainNode | null = null;
@@ -55,12 +57,17 @@ function clearAudioResources() {
 }
 
 export async function playAlarm() {
-  if (isAlarmPlaying) return;
-  isAlarmPlaying = true;
-  clearAudioResources();
-  if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+  const settings = loadSettings();
+  if (!settings.sound && !settings.vibrate) return;
+  if (settings.sound) {
+    if (isAlarmPlaying) return;
+    isAlarmPlaying = true;
+    clearAudioResources();
+  }
+  if (settings.vibrate && typeof navigator !== "undefined" && "vibrate" in navigator) {
     navigator.vibrate([280, 80, 280, 80, 280]);
   }
+  if (!settings.sound) return;
   try {
     const ctx = createAudioContext();
     if (!ctx) {

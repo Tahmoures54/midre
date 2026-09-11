@@ -1,4 +1,6 @@
 export type DoseStatus = "on-time" | "early" | "late" | "missed" | "snoozed" | "skipped";
+export type ScheduleKind = "interval" | "times";
+export type AccentId = "sage" | "terra" | "olive" | "slate";
 
 export interface HistoryRecord {
   id: string;
@@ -13,9 +15,14 @@ export interface Medication {
   name: string;
   condition: string;
   dosage: string;
-  /** Interval in seconds. */
+  notes: string;
+  accent: AccentId;
+  scheduleKind: ScheduleKind;
+  /** Interval in seconds — also the progress-bar denominator. */
   interval: number;
   intervalHours: number;
+  /** Daily clock times as `HH:mm` when `scheduleKind` is `"times"`. */
+  times: string[];
   quantity: number;
   running: boolean;
   nextDoseAt?: number;
@@ -34,6 +41,8 @@ export interface BackupPayload {
   medications: Medication[];
 }
 
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 export const MAX_HISTORY_RECORDS = 120;
-export const APP_VERSION = "3.2.2";
+export const APP_VERSION = "4.0.0";
+
+export const ACCENTS: AccentId[] = ["sage", "terra", "olive", "slate"];

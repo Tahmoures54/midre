@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import type { Medication } from "./types";
+import { toast } from "sonner";
+import type { AccentId, Medication, ScheduleKind } from "./types";
 import {
   addMedication,
   deleteMedication,
@@ -9,6 +10,7 @@ import {
   updateMedication,
 } from "./database";
 import {
+  applyRefill,
   applyReset,
   applySkip,
   applySnooze,
@@ -26,12 +28,19 @@ import {
   requestNotificationPermission,
   type PermissionState,
 } from "./notifications";
+import { intervalSecondsForTimes, nextOccurrence, normalizeTimes } from "./schedule";
+import { loadSettings, saveSettings, type AppSettings } from "./settings";
+import { sortMedications } from "./stats";
 
 export interface MedDraft {
   name: string;
   condition: string;
   dosage: string;
+  notes: string;
+  accent: AccentId;
+  scheduleKind: ScheduleKind;
   intervalHours: number;
+  times: string[];
   quantity: number;
   startImmediately: boolean;
 }
@@ -43,6 +52,7 @@ interface MedStore {
   permission: PermissionState;
   alertId: number | null;
   now: number;
+  settings: AppSettings;
   load: () => Promise<void>;
   add: (draft: MedDraft) => Promise<void>;
   save: (id: number, draft: MedDraft) => Promise<void>;
@@ -52,30 +62,50 @@ interface MedStore {
   skip: (id: number) => Promise<void>;
   toggle: (id: number) => Promise<void>;
   reset: (id: number) => Promise<void>;
+  refill: (id: number, add?: number) => Promise<void>;
   tick: () => void;
   requestPermission: () => Promise<void>;
   dismissAlert: () => void;
   exportJson: () => Promise<void>;
   importJson: (file: File) => Promise<void>;
   addDemo: () => Promise<void>;
+  updateSettings: (patch: Partial<AppSettings>) => void;
 }
 
 async function persist(m: Medication) {
   await updateMedication(m);
 }
 
+function nextPendingId(medications: Medication[], except?: number | null): number | null {
+  return medications.find((m) => m.pendingDose && m.id !== except)?.id ?? null;
+}
+
+function scheduleFromDraft(draft: MedDraft, now: number) {
+  const scheduleKind = draft.scheduleKind;
+  const times = scheduleKind === "times" ? normalizeTimes(draft.times) : [];
+  const interval = scheduleKind === "times" ? intervalSecondsForTimes(times) : intervalFromHours(draft.intervalHours);
+  const intervalHours = scheduleKind === "times" ? (times.length ? 24 / times.length : 24) : draft.intervalHours;
+  const nextDoseAt = draft.startImmediately
+    ? scheduleKind === "times" && times.length
+      ? nextOccurrence(times, now)
+      : now + interval * 1000
+    : undefined;
+  return { scheduleKind, times, interval, intervalHours, nextDoseAt };
+}
+
 export const useMedStore = create<MedStore>((set, get) => ({
   medications: [],
-  bootDone: true,
+  bootDone: false,
   bootError: null,
   permission: "default",
   alertId: null,
   now: Date.now(),
+  settings: DEFAULT_BOOT_SETTINGS(),
 
   load: async () => {
     try {
       const permission = checkNotificationPermission();
-      const medications = await getAllMedications();
+      const medications = sortMedications(await getAllMedications());
       const due = medications.find((m) => m.pendingDose);
       set({
         medications,
@@ -83,6 +113,8 @@ export const useMedStore = create<MedStore>((set, get) => ({
         bootDone: true,
         bootError: null,
         alertId: due?.id ?? null,
+        settings: loadSettings(),
+        now: Date.now(),
       });
       if (due) {
         void playAlarm();
@@ -90,6 +122,7 @@ export const useMedStore = create<MedStore>((set, get) => ({
       }
     } catch (error) {
       set({
+        bootDone: true,
         bootError: error instanceof Error ? error.message : "خطا در بارگذاری داده‌ها",
       });
     }
@@ -97,38 +130,47 @@ export const useMedStore = create<MedStore>((set, get) => ({
 
   add: async (draft) => {
     const now = Date.now();
-    const interval = intervalFromHours(draft.intervalHours);
+    const planned = scheduleFromDraft(draft, now);
     const created = await addMedication({
       name: draft.name,
       condition: draft.condition,
       dosage: draft.dosage,
+      notes: draft.notes,
+      accent: draft.accent,
       quantity: draft.quantity,
-      intervalHours: draft.intervalHours,
-      interval,
+      scheduleKind: planned.scheduleKind,
+      times: planned.times,
+      intervalHours: planned.intervalHours,
+      interval: planned.interval,
       running: draft.startImmediately,
       pendingDose: false,
-      nextDoseAt: draft.startImmediately ? now + interval * 1000 : undefined,
+      nextDoseAt: planned.nextDoseAt,
       snoozeCount: 0,
       createdAt: now,
       updatedAt: now,
       history: [],
     });
-    set((s) => ({ medications: [...s.medications, created] }));
+    set((s) => ({ medications: sortMedications([...s.medications, created]) }));
+    toast.success(`${created.name} اضافه شد`);
   },
 
   save: async (id, draft) => {
     const current = get().medications.find((m) => m.id === id);
     if (!current) return;
     const now = Date.now();
-    const interval = intervalFromHours(draft.intervalHours);
+    const planned = scheduleFromDraft({ ...draft, startImmediately: false }, now);
     let next: Medication = {
       ...current,
       name: draft.name,
       condition: draft.condition,
       dosage: draft.dosage,
+      notes: draft.notes,
+      accent: draft.accent,
       quantity: draft.quantity,
-      intervalHours: draft.intervalHours,
-      interval,
+      scheduleKind: planned.scheduleKind,
+      times: planned.times,
+      intervalHours: planned.intervalHours,
+      interval: planned.interval,
       updatedAt: now,
     };
     if (draft.startImmediately && !next.running && !next.pendingDose) {
@@ -136,25 +178,34 @@ export const useMedStore = create<MedStore>((set, get) => ({
         ...next,
         running: true,
         pendingDose: false,
-        nextDoseAt: now + interval * 1000,
+        nextDoseAt: planned.scheduleKind === "times" && planned.times.length ? nextOccurrence(planned.times, now) : now + planned.interval * 1000,
       };
-    } else if (next.running && next.nextDoseAt && current.interval !== interval) {
+    } else if (next.running && next.nextDoseAt && current.interval !== planned.interval && planned.scheduleKind === "interval" && current.scheduleKind === "interval") {
       const left = remainingSeconds(current, now);
       const ratio = left / Math.max(1, current.interval);
-      const remaining = Math.max(1, Math.round(ratio * interval));
+      const remaining = Math.max(1, Math.round(ratio * planned.interval));
       next = { ...next, nextDoseAt: now + remaining * 1000 };
+    } else if (next.running && !next.pendingDose && current.scheduleKind !== planned.scheduleKind) {
+      next = {
+        ...next,
+        nextDoseAt:
+          planned.scheduleKind === "times" && planned.times.length ? nextOccurrence(planned.times, now) : now + planned.interval * 1000,
+      };
     }
     await persist(next);
-    set((s) => ({ medications: s.medications.map((m) => (m.id === id ? next : m)) }));
+    set((s) => ({ medications: sortMedications(s.medications.map((m) => (m.id === id ? next : m))) }));
+    toast.success("تغییرات ذخیره شد");
   },
 
   remove: async (id) => {
     await deleteMedication(id);
-    set((s) => ({
-      medications: s.medications.filter((m) => m.id !== id),
-      alertId: s.alertId === id ? null : s.alertId,
-    }));
+    set((s) => {
+      const medications = s.medications.filter((m) => m.id !== id);
+      const alertId = s.alertId === id ? nextPendingId(medications) : s.alertId;
+      return { medications, alertId };
+    });
     if (get().alertId === null) stopAlarm();
+    toast.success("دارو حذف شد");
   },
 
   take: async (id) => {
@@ -162,11 +213,17 @@ export const useMedStore = create<MedStore>((set, get) => ({
     if (!current) return;
     const updated = applyTake(current);
     await persist(updated);
-    stopAlarm();
+    const medications = get().medications.map((m) => (m.id === id ? updated : m));
+    const alertId = nextPendingId(medications, id);
+    if (!alertId) stopAlarm();
+    else void playAlarm();
     set((s) => ({
-      medications: s.medications.map((m) => (m.id === id ? updated : m)),
-      alertId: s.alertId === id ? null : s.alertId,
+      medications: sortMedications(medications),
+      alertId,
     }));
+    if (updated.quantity <= 5) {
+      toast.message(updated.quantity === 0 ? "موجودی تمام شد — شارژ کنید" : `موجودی ${updated.quantity} عدد`);
+    }
   },
 
   snooze: async (id, minutes = 10) => {
@@ -174,10 +231,12 @@ export const useMedStore = create<MedStore>((set, get) => ({
     if (!current) return;
     const updated = applySnooze(current, minutes);
     await persist(updated);
-    stopAlarm();
+    const medications = get().medications.map((m) => (m.id === id ? updated : m));
+    const alertId = nextPendingId(medications, id);
+    if (!alertId) stopAlarm();
     set((s) => ({
-      medications: s.medications.map((m) => (m.id === id ? updated : m)),
-      alertId: s.alertId === id ? null : s.alertId,
+      medications: sortMedications(medications),
+      alertId,
     }));
   },
 
@@ -186,10 +245,12 @@ export const useMedStore = create<MedStore>((set, get) => ({
     if (!current) return;
     const updated = applySkip(current);
     await persist(updated);
-    stopAlarm();
+    const medications = get().medications.map((m) => (m.id === id ? updated : m));
+    const alertId = nextPendingId(medications, id);
+    if (!alertId) stopAlarm();
     set((s) => ({
-      medications: s.medications.map((m) => (m.id === id ? updated : m)),
-      alertId: s.alertId === id ? null : s.alertId,
+      medications: sortMedications(medications),
+      alertId,
     }));
   },
 
@@ -198,7 +259,7 @@ export const useMedStore = create<MedStore>((set, get) => ({
     if (!current) return;
     const updated = applyToggle(current);
     await persist(updated);
-    set((s) => ({ medications: s.medications.map((m) => (m.id === id ? updated : m)) }));
+    set((s) => ({ medications: sortMedications(s.medications.map((m) => (m.id === id ? updated : m))) }));
   },
 
   reset: async (id) => {
@@ -206,11 +267,21 @@ export const useMedStore = create<MedStore>((set, get) => ({
     if (!current) return;
     const updated = applyReset(current);
     await persist(updated);
-    if (get().alertId === id) stopAlarm();
-    set((s) => ({
-      medications: s.medications.map((m) => (m.id === id ? updated : m)),
-      alertId: s.alertId === id ? null : s.alertId,
-    }));
+    set((s) => {
+      const medications = s.medications.map((m) => (m.id === id ? updated : m));
+      const alertId = s.alertId === id ? nextPendingId(medications, id) : s.alertId;
+      if (alertId == null) stopAlarm();
+      return { medications: sortMedications(medications), alertId };
+    });
+  },
+
+  refill: async (id, add = 30) => {
+    const current = get().medications.find((m) => m.id === id);
+    if (!current) return;
+    const updated = applyRefill(current, add);
+    await persist(updated);
+    set((s) => ({ medications: s.medications.map((m) => (m.id === id ? updated : m)) }));
+    toast.success(`موجودی ${updated.quantity} عدد شد`);
   },
 
   tick: () => {
@@ -222,7 +293,7 @@ export const useMedStore = create<MedStore>((set, get) => ({
       if (m.running && m.nextDoseAt && m.nextDoseAt <= now) {
         changed = true;
         const due = toDue(m, now);
-        newAlert = due.id;
+        if (newAlert == null) newAlert = due.id;
         void persist(due);
         void playAlarm();
         notifyDue(due);
@@ -231,7 +302,7 @@ export const useMedStore = create<MedStore>((set, get) => ({
       return m;
     });
     if (changed) {
-      set({ medications: next, now, alertId: newAlert });
+      set({ medications: sortMedications(next), now, alertId: newAlert });
     } else {
       set({ now });
     }
@@ -240,11 +311,15 @@ export const useMedStore = create<MedStore>((set, get) => ({
   requestPermission: async () => {
     const permission = await requestNotificationPermission();
     set({ permission });
+    if (permission === "granted") toast.success("اعلان‌ها فعال شد");
+    else if (permission === "denied") toast.error("مجوز اعلان رد شد");
   },
 
   dismissAlert: () => {
-    stopAlarm();
-    set({ alertId: null });
+    const { medications, alertId } = get();
+    const next = nextPendingId(medications, alertId);
+    if (!next) stopAlarm();
+    set({ alertId: next });
   },
 
   exportJson: async () => {
@@ -256,12 +331,18 @@ export const useMedStore = create<MedStore>((set, get) => ({
     a.download = `medireminder-backup-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
+    toast.success("فایل پشتیبان آماده شد");
   },
 
   importJson: async (file) => {
-    const payload = JSON.parse(await file.text()) as BackupPayload;
-    await importBackup(payload);
-    await get().load();
+    try {
+      const payload = JSON.parse(await file.text()) as BackupPayload;
+      await importBackup(payload);
+      await get().load();
+      toast.success("پشتیبان بازیابی شد");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "بازیابی انجام نشد");
+    }
   },
 
   addDemo: async () => {
@@ -269,9 +350,23 @@ export const useMedStore = create<MedStore>((set, get) => ({
       name: "نمونه — ویتامین D",
       condition: "دمو برای تست یادآوری",
       dosage: "۱۰۰۰ IU",
-      intervalHours: 2 / 60, // 2 minutes
+      notes: "با غذا مصرف شود",
+      accent: "olive",
+      scheduleKind: "interval",
+      intervalHours: 2 / 60,
+      times: [],
       quantity: 14,
       startImmediately: true,
     });
   },
+
+  updateSettings: (patch) => {
+    const settings = { ...get().settings, ...patch };
+    saveSettings(settings);
+    set({ settings });
+  },
 }));
+
+function DEFAULT_BOOT_SETTINGS(): AppSettings {
+  return { sound: true, vibrate: true, nagSeconds: 45 };
+}

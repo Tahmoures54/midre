@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
+import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { Button } from "@/components/ui/button";
 import { adherenceScore, formatFaDateTime } from "@/lib/med/medication";
+import { completionRate, lastNDays, streakDays } from "@/lib/med/stats";
 import type { DoseStatus, HistoryRecord, Medication } from "@/lib/med/types";
 import { cn } from "@/lib/utils";
 
@@ -24,8 +26,11 @@ export function ReportSheet({ medication, onClose }: Props) {
     () => [...(medication.history || [])].sort((a, b) => b.takenAt - a.takenAt),
     [medication.history],
   );
-  const recent = history.slice(0, 8);
-  const score = adherenceScore(history);
+  const recent = history.slice(0, 10);
+  const onTime = adherenceScore(history);
+  const done = completionRate(history);
+  const streak = streakDays(history);
+  const chart = lastNDays(history, 7);
   const counts = {
     onTime: history.filter((h) => h.status === "on-time").length,
     early: history.filter((h) => h.status === "early").length,
@@ -35,7 +40,10 @@ export function ReportSheet({ medication, onClose }: Props) {
   const [fingerprint, setFingerprint] = useState("");
   const [note, setNote] = useState<string | null>(null);
 
-  const reportText = useMemo(() => buildReport(medication, history, score, counts), [medication, history, score, counts]);
+  const reportText = useMemo(
+    () => buildReport(medication, history, onTime, done, streak, counts),
+    [medication, history, onTime, done, streak, counts],
+  );
 
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -79,7 +87,7 @@ export function ReportSheet({ medication, onClose }: Props) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="report-title"
-        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-surface p-5 shadow-[0_0_0_1px_rgba(238,243,240,0.1)]"
+        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-surface p-5 shadow-ring"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-start justify-between gap-3">
@@ -96,14 +104,36 @@ export function ReportSheet({ medication, onClose }: Props) {
 
         {note ? <p className="mb-3 rounded-lg bg-primary/10 px-3 py-2 text-sm text-primary">{note}</p> : null}
 
-        <div className="mb-4 flex items-center justify-between rounded-xl bg-bg px-4 py-3">
-          <div>
-            <p className="text-xs text-muted">پایبندی به‌موقع</p>
-            <p className="text-sm text-fg">{history.length === 0 ? "هنوز داده‌ای نیست" : score >= 80 ? "عالی" : score >= 50 ? "قابل قبول" : "نیاز به توجه"}</p>
-          </div>
-          <p className={cn("text-3xl font-medium tabular-nums", history.length === 0 ? "text-subtle" : score >= 80 ? "text-primary" : "text-due")}>
-            {history.length ? `${score}٪` : "—"}
+        <div className="mb-4 grid grid-cols-3 gap-2">
+          <ScoreBox label="به‌موقع" value={history.length ? `${onTime}٪` : "—"} tone={onTime >= 80 ? "ok" : "warn"} />
+          <ScoreBox label="نرخ مصرف" value={history.length ? `${done}٪` : "—"} tone="neutral" />
+          <ScoreBox label="روز پیاپی" value={streak ? `${streak}` : "—"} tone="neutral" />
+        </div>
+
+        <div className="mb-4 rounded-xl bg-bg px-2 py-3" dir="ltr">
+          <p className="mb-2 px-2 text-right text-sm font-medium text-fg" dir="rtl">
+            هفت روز اخیر
           </p>
+          <div className="h-36">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chart} barGap={2}>
+                <XAxis dataKey="label" tick={{ fill: "var(--color-muted)", fontSize: 11 }} axisLine={false} tickLine={false} />
+                <Tooltip
+                  cursor={{ fill: "rgba(238,243,240,0.04)" }}
+                  contentStyle={{
+                    background: "var(--color-surface)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: 12,
+                    color: "var(--color-fg)",
+                    fontSize: 12,
+                  }}
+                  formatter={(value, name) => [value as number, name === "taken" ? "مصرف" : "رد شده"]}
+                />
+                <Bar dataKey="taken" fill="var(--color-primary)" radius={[4, 4, 0, 0]} maxBarSize={18} />
+                <Bar dataKey="skipped" fill="var(--color-due)" radius={[4, 4, 0, 0]} maxBarSize={18} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
 
         <div className="mb-4 grid grid-cols-4 gap-2 text-center text-xs">
@@ -113,7 +143,7 @@ export function ReportSheet({ medication, onClose }: Props) {
             ["دیرتر", counts.late],
             ["از دست", counts.missed],
           ].map(([label, n]) => (
-            <div key={label} className="rounded-xl bg-bg px-2 py-3">
+            <div key={String(label)} className="rounded-xl bg-bg px-2 py-3">
               <p className="text-muted">{label}</p>
               <p className="mt-1 text-lg font-medium tabular-nums">{n}</p>
             </div>
@@ -155,6 +185,17 @@ export function ReportSheet({ medication, onClose }: Props) {
   );
 }
 
+function ScoreBox({ label, value, tone }: { label: string; value: string; tone: "ok" | "warn" | "neutral" }) {
+  return (
+    <div className="rounded-xl bg-bg px-3 py-3 text-center">
+      <p className="text-xs text-muted">{label}</p>
+      <p className={cn("mt-1 text-xl font-medium tabular-nums", tone === "ok" && "text-primary", tone === "warn" && "text-due")}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
 function HistoryRow({ record }: { record: HistoryRecord }) {
   return (
     <li className="flex items-center justify-between text-sm">
@@ -167,7 +208,9 @@ function HistoryRow({ record }: { record: HistoryRecord }) {
 function buildReport(
   medication: Medication,
   history: HistoryRecord[],
-  score: number,
+  onTime: number,
+  done: number,
+  streak: number,
   counts: { onTime: number; early: number; late: number; missed: number },
 ) {
   const last = history[0] ? formatFaDateTime(history[0].takenAt) : "—";
@@ -176,7 +219,10 @@ function buildReport(
 نام: ${medication.name}
 بیماری: ${medication.condition || "مشخص نشده"}
 دوز: ${medication.dosage}
-پایبندی به‌موقع: ${history.length ? `${score}٪` : "بدون داده"}
+یادداشت: ${medication.notes || "—"}
+پایبندی به‌موقع: ${history.length ? `${onTime}٪` : "بدون داده"}
+نرخ مصرف: ${history.length ? `${done}٪` : "بدون داده"}
+روزهای پیاپی: ${streak || "—"}
 ثبت‌شده: ${history.length}
 به‌موقع: ${counts.onTime} · زودتر: ${counts.early} · دیرتر: ${counts.late} · از دست: ${counts.missed}
 آخرین دوز: ${last}

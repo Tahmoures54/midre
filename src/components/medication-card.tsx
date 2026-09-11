@@ -2,9 +2,16 @@ import { BarChart3, Pause, Pencil, Play, RotateCcw, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { formatCountdown, formatFaTime, remainingSeconds } from "@/lib/med/medication";
-import type { Medication } from "@/lib/med/types";
+import { formatCountdown, formatFaTime, formatInterval, formatTimesLabel, remainingSeconds, progressDenominator } from "@/lib/med/medication";
+import type { AccentId, Medication } from "@/lib/med/types";
 import { cn } from "@/lib/utils";
+
+const RAIL: Record<AccentId, string> = {
+  sage: "bg-primary",
+  terra: "bg-terracotta",
+  olive: "bg-olive",
+  slate: "bg-slate",
+};
 
 interface Props {
   medication: Medication;
@@ -18,6 +25,7 @@ interface Props {
   onTake: () => void;
   onSnooze: () => void;
   onSkip: () => void;
+  onRefill: () => void;
 }
 
 export function MedicationCard({
@@ -32,24 +40,28 @@ export function MedicationCard({
   onTake,
   onSnooze,
   onSkip,
+  onRefill,
 }: Props) {
   const due = m.pendingDose;
   const running = m.running && !due;
   const remaining = remainingSeconds(m, now);
-  const progress = due ? 100 : Math.min(100, Math.max(0, (remaining / Math.max(1, m.interval)) * 100));
+  const denom = progressDenominator(m);
+  const progress = due ? 100 : running ? Math.min(100, Math.max(0, ((denom - remaining) / denom) * 100)) : 0;
   const empty = m.quantity <= 0;
   const low = !empty && m.quantity <= 5;
+  const scheduleLabel = m.scheduleKind === "times" ? formatTimesLabel(m.times) : `هر ${formatInterval(m.interval)}`;
 
   return (
     <article
       className={cn(
-        "relative overflow-hidden rounded-2xl bg-surface p-4 shadow-[0_0_0_1px_rgba(238,243,240,0.08)]",
+        "relative overflow-hidden rounded-2xl bg-surface p-4 shadow-ring",
         "transition-[box-shadow,transform] duration-200 ease-out",
-        due && "shadow-[0_0_0_1px_rgba(196,92,74,0.45)]",
-        running && "shadow-[0_0_0_1px_rgba(126,201,168,0.28)]",
+        due && "shadow-ring-due",
+        running && "shadow-ring-ok",
       )}
     >
-      <header className="flex items-start justify-between gap-3">
+      <span className={cn("absolute inset-y-0 start-0 w-1", RAIL[m.accent] ?? RAIL.sage)} aria-hidden />
+      <header className="flex items-start justify-between gap-3 ps-2">
         <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <Badge>#{index}</Badge>
@@ -65,6 +77,7 @@ export function MedicationCard({
           </div>
           <h3 className="text-xl font-semibold tracking-tight text-fg text-balance">{m.name}</h3>
           {m.condition ? <p className="mt-1 truncate text-sm text-muted">{m.condition}</p> : null}
+          {m.notes ? <p className="mt-1 truncate text-xs text-subtle">{m.notes}</p> : null}
         </div>
         <div className="flex shrink-0 gap-1">
           <Button variant="ghost" size="icon" className="size-10" onClick={onEdit} aria-label="ویرایش">
@@ -76,9 +89,9 @@ export function MedicationCard({
         </div>
       </header>
 
-      <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted">
+      <div className="mt-3 flex flex-wrap gap-2 ps-2 text-xs text-muted">
         <span className="rounded-full bg-surface-2 px-2.5 py-1 ring-1 ring-border">{m.dosage}</span>
-        <span className="rounded-full bg-surface-2 px-2.5 py-1 ring-1 ring-border">هر {formatInterval(m.interval)}</span>
+        <span className="rounded-full bg-surface-2 px-2.5 py-1 ring-1 ring-border">{scheduleLabel}</span>
         <span
           className={cn(
             "rounded-full bg-surface-2 px-2.5 py-1 ring-1 ring-border",
@@ -112,11 +125,7 @@ export function MedicationCard({
         )}
       </div>
 
-      <Progress
-        value={progress}
-        className="mt-4"
-        barClassName={due ? "bg-due" : running ? "bg-primary" : "bg-subtle"}
-      />
+      <Progress value={progress} className="mt-4" barClassName={due ? "bg-due" : running ? "bg-primary" : "bg-subtle"} />
 
       {due ? (
         <div className="mt-4 grid grid-cols-2 gap-2">
@@ -144,16 +153,12 @@ export function MedicationCard({
           </Button>
         </div>
       )}
+
+      {low || empty ? (
+        <Button variant="outline" className="mt-2 h-11 w-full" onClick={onRefill}>
+          شارژ موجودی +۳۰
+        </Button>
+      ) : null}
     </article>
   );
-}
-
-function formatInterval(seconds: number): string {
-  if (seconds < 3600) {
-    const m = Math.max(1, Math.round(seconds / 60));
-    return `${m} دقیقه`;
-  }
-  const h = seconds / 3600;
-  if (Number.isInteger(h)) return `${h} ساعت`;
-  return `${h.toFixed(1)} ساعت`;
 }

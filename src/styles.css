@@ -17,11 +17,16 @@
   --color-due: #c45c4a;
   --color-due-fg: #fdecea;
   --color-terracotta: #c47a62;
+  --color-olive: #9fb584;
+  --color-slate: #8a9aa6;
 
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
   --radius-xl: 24px;
+  --shadow-ring: 0 0 0 1px rgb(238 243 240 / 8%);
+  --shadow-ring-ok: 0 0 0 1px rgb(126 201 168 / 28%);
+  --shadow-ring-due: 0 0 0 1px rgb(196 92 74 / 45%);
 }
 
 @layer base {
@@ -75,4 +80,21 @@
     opacity: 1;
     transform: scale(1) translateY(0);
   }
+}
+
+.shadow-ring {
+  box-shadow: var(--shadow-ring);
+}
+.shadow-ring-ok {
+  box-shadow: var(--shadow-ring-ok);
+}
+.shadow-ring-due {
+  box-shadow: var(--shadow-ring-due);
+}
+
+[data-sonner-toaster] [data-sonner-toast] {
+  background: var(--color-surface) !important;
+  color: var(--color-fg) !important;
+  border: 1px solid var(--color-border) !important;
+  font-family: var(--font-sans);
 }

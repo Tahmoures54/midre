@@ -12,7 +12,7 @@ export const Route = createRootRoute({
       { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
       { title: APP_NAME },
       { name: "theme-color", content: "#0e1412" },
-      { name: "description", content: "یادآور هوشمند دارو — آفلاین، با هشدار مکرر تا تأیید مصرف" },
+      { name: "description", content: "یادآور دارو با ساعات روزانه، هشدار مکرر تا تأیید مصرف، و گزارش پایبندی — کاملاً آفلاین" },
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
