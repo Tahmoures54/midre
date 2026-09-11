@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { Button } from "@/components/ui/button";
+import { dateLocale, statusMessageKey, t, useI18n, type Locale, type MessageKey } from "@/lib/i18n";
 import { adherenceScore, formatFaDateTime } from "@/lib/med/medication";
 import { completionRate, lastNDays, streakDays } from "@/lib/med/stats";
-import type { DoseStatus, HistoryRecord, Medication } from "@/lib/med/types";
+import type { HistoryRecord, Medication } from "@/lib/med/types";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -12,16 +13,8 @@ interface Props {
   onClose: () => void;
 }
 
-const STATUS_LABEL: Record<DoseStatus, string> = {
-  "on-time": "به‌موقع",
-  early: "زودتر",
-  late: "دیرتر",
-  missed: "از دست رفته",
-  snoozed: "اسنوز",
-  skipped: "رد شده",
-};
-
 export function ReportSheet({ medication, onClose }: Props) {
+  const { t, locale, dir } = useI18n();
   const history = useMemo(
     () => [...(medication.history || [])].sort((a, b) => b.takenAt - a.takenAt),
     [medication.history],
@@ -30,7 +23,7 @@ export function ReportSheet({ medication, onClose }: Props) {
   const onTime = adherenceScore(history);
   const done = completionRate(history);
   const streak = streakDays(history);
-  const chart = lastNDays(history, 7);
+  const chart = lastNDays(history, 7, Date.now(), dateLocale(locale));
   const counts = {
     onTime: history.filter((h) => h.status === "on-time").length,
     early: history.filter((h) => h.status === "early").length,
@@ -41,8 +34,8 @@ export function ReportSheet({ medication, onClose }: Props) {
   const [note, setNote] = useState<string | null>(null);
 
   const reportText = useMemo(
-    () => buildReport(medication, history, onTime, done, streak, counts),
-    [medication, history, onTime, done, streak, counts],
+    () => buildReport(medication, history, onTime, done, streak, counts, locale),
+    [medication, history, onTime, done, streak, counts, locale],
   );
 
   useEffect(() => {
@@ -60,25 +53,25 @@ export function ReportSheet({ medication, onClose }: Props) {
   }, [onClose, reportText]);
 
   const copy = async () => {
-    const body = `${reportText}\n\nاثر انگشت متن:\n${fingerprint}`;
+    const body = `${reportText}\n\n${t("fingerprintLabel")}:\n${fingerprint}`;
     try {
       await navigator.clipboard.writeText(body);
-      setNote("گزارش کپی شد.");
+      setNote(t("reportCopied"));
     } catch {
-      setNote("کپی در دسترس نبود.");
+      setNote(t("reportCopyFail"));
     }
   };
 
   const download = () => {
-    const body = `${reportText}\n\nاثر انگشت متن:\n${fingerprint}`;
+    const body = `${reportText}\n\n${t("fingerprintLabel")}:\n${fingerprint}`;
     const blob = new Blob([body], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${medication.name}-گزارش.txt`;
+    a.download = t("reportFile", { name: medication.name });
     a.click();
     URL.revokeObjectURL(url);
-    setNote("فایل ذخیره شد.");
+    setNote(t("reportSaved"));
   };
 
   return (
@@ -93,11 +86,11 @@ export function ReportSheet({ medication, onClose }: Props) {
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <h2 id="report-title" className="text-lg font-semibold">
-              گزارش {medication.name}
+              {t("reportTitle", { name: medication.name })}
             </h2>
-            <p className="mt-1 text-xs text-muted">خلاصه برای پزشک یا مراقب — داده روی همین دستگاه است</p>
+            <p className="mt-1 text-xs text-muted">{t("reportHint")}</p>
           </div>
-          <Button variant="ghost" size="icon" className="size-10" onClick={onClose} aria-label="بستن">
+          <Button variant="ghost" size="icon" className="size-10" onClick={onClose} aria-label={t("close")}>
             <X />
           </Button>
         </div>
@@ -105,14 +98,14 @@ export function ReportSheet({ medication, onClose }: Props) {
         {note ? <p className="mb-3 rounded-lg bg-primary/10 px-3 py-2 text-sm text-primary">{note}</p> : null}
 
         <div className="mb-4 grid grid-cols-3 gap-2">
-          <ScoreBox label="به‌موقع" value={history.length ? `${onTime}٪` : "—"} tone={onTime >= 80 ? "ok" : "warn"} />
-          <ScoreBox label="نرخ مصرف" value={history.length ? `${done}٪` : "—"} tone="neutral" />
-          <ScoreBox label="روز پیاپی" value={streak ? `${streak}` : "—"} tone="neutral" />
+          <ScoreBox label={t("onTime")} value={history.length ? t("percent", { n: onTime }) : "—"} tone={onTime >= 80 ? "ok" : "warn"} />
+          <ScoreBox label={t("takeRate")} value={history.length ? t("percent", { n: done }) : "—"} tone="neutral" />
+          <ScoreBox label={t("streak")} value={streak ? `${streak}` : "—"} tone="neutral" />
         </div>
 
         <div className="mb-4 rounded-xl bg-bg px-2 py-3" dir="ltr">
-          <p className="mb-2 px-2 text-right text-sm font-medium text-fg" dir="rtl">
-            هفت روز اخیر
+          <p className="mb-2 px-2 text-start text-sm font-medium text-fg" dir={dir}>
+            {t("last7")}
           </p>
           <div className="h-36">
             <ResponsiveContainer width="100%" height="100%">
@@ -127,7 +120,7 @@ export function ReportSheet({ medication, onClose }: Props) {
                     color: "var(--color-fg)",
                     fontSize: 12,
                   }}
-                  formatter={(value, name) => [value as number, name === "taken" ? "مصرف" : "رد شده"]}
+                  formatter={(value, name) => [value as number, name === "taken" ? t("chartTaken") : t("chartSkipped")]}
                 />
                 <Bar dataKey="taken" fill="var(--color-primary)" radius={[4, 4, 0, 0]} maxBarSize={18} />
                 <Bar dataKey="skipped" fill="var(--color-due)" radius={[4, 4, 0, 0]} maxBarSize={18} />
@@ -138,10 +131,10 @@ export function ReportSheet({ medication, onClose }: Props) {
 
         <div className="mb-4 grid grid-cols-4 gap-2 text-center text-xs">
           {[
-            ["به‌موقع", counts.onTime],
-            ["زودتر", counts.early],
-            ["دیرتر", counts.late],
-            ["از دست", counts.missed],
+            [t("onTime"), counts.onTime],
+            [t("early"), counts.early],
+            [t("late"), counts.late],
+            [t("missedShort"), counts.missed],
           ].map(([label, n]) => (
             <div key={String(label)} className="rounded-xl bg-bg px-2 py-3">
               <p className="text-muted">{label}</p>
@@ -151,9 +144,9 @@ export function ReportSheet({ medication, onClose }: Props) {
         </div>
 
         <div className="mb-4 rounded-xl bg-bg px-4 py-3">
-          <p className="mb-2 text-sm font-medium">دوزهای اخیر</p>
+          <p className="mb-2 text-sm font-medium">{t("recentDoses")}</p>
           {recent.length === 0 ? (
-            <p className="text-sm text-muted">هنوز دوزی ثبت نشده.</p>
+            <p className="text-sm text-muted">{t("noDoses")}</p>
           ) : (
             <ul className="space-y-2">
               {recent.map((record) => (
@@ -164,21 +157,21 @@ export function ReportSheet({ medication, onClose }: Props) {
         </div>
 
         <p className="mb-4 break-all font-mono text-[10px] leading-relaxed text-subtle">
-          اثر انگشت متن (SHA-256) — امضا نیست، فقط برای مقایسهٔ دو نسخه از همین متن:
+          {t("fingerprint")}
           <br />
           {fingerprint || "…"}
         </p>
 
         <div className="grid grid-cols-2 gap-2">
           <Button variant="secondary" onClick={() => void copy()}>
-            کپی
+            {t("copy")}
           </Button>
           <Button variant="secondary" onClick={download}>
-            دانلود
+            {t("download")}
           </Button>
         </div>
         <Button variant="ghost" className="mt-2 w-full" onClick={onClose}>
-          بستن
+          {t("close")}
         </Button>
       </div>
     </div>
@@ -197,10 +190,11 @@ function ScoreBox({ label, value, tone }: { label: string; value: string; tone: 
 }
 
 function HistoryRow({ record }: { record: HistoryRecord }) {
+  const { t, locale } = useI18n();
   return (
     <li className="flex items-center justify-between text-sm">
-      <span className="text-muted">{formatFaDateTime(record.takenAt)}</span>
-      <span className="text-fg">{STATUS_LABEL[record.status]}</span>
+      <span className="text-muted">{formatFaDateTime(record.takenAt, locale)}</span>
+      <span className="text-fg">{t(statusMessageKey(record.status))}</span>
     </li>
   );
 }
@@ -212,23 +206,28 @@ function buildReport(
   done: number,
   streak: number,
   counts: { onTime: number; early: number; late: number; missed: number },
+  locale: Locale,
 ) {
-  const last = history[0] ? formatFaDateTime(history[0].takenAt) : "—";
-  const lines = history.slice(0, 5).map((h) => `- ${formatFaDateTime(h.takenAt)} — ${STATUS_LABEL[h.status]}`);
-  return `گزارش مصرف دارو
-نام: ${medication.name}
-بیماری: ${medication.condition || "مشخص نشده"}
-دوز: ${medication.dosage}
-یادداشت: ${medication.notes || "—"}
-پایبندی به‌موقع: ${history.length ? `${onTime}٪` : "بدون داده"}
-نرخ مصرف: ${history.length ? `${done}٪` : "بدون داده"}
-روزهای پیاپی: ${streak || "—"}
-ثبت‌شده: ${history.length}
-به‌موقع: ${counts.onTime} · زودتر: ${counts.early} · دیرتر: ${counts.late} · از دست: ${counts.missed}
-آخرین دوز: ${last}
+  const tr = (key: MessageKey, vars?: Record<string, string | number>) => t(key, vars, locale);
+  const last = history[0] ? formatFaDateTime(history[0].takenAt, locale) : "—";
+  const lines = history
+    .slice(0, 5)
+    .map((h) => `- ${formatFaDateTime(h.takenAt, locale)} — ${tr(statusMessageKey(h.status))}`);
+  const pct = (n: number) => (history.length ? tr("percent", { n }) : tr("noData"));
+  return `${tr("reportDocTitle")}
+${tr("reportName")}: ${medication.name}
+${tr("reportCondition")}: ${medication.condition || tr("unspecified")}
+${tr("reportDose")}: ${medication.dosage}
+${tr("reportNotes")}: ${medication.notes || "—"}
+${tr("reportOnTime")}: ${pct(onTime)}
+${tr("reportTakeRate")}: ${pct(done)}
+${tr("reportStreak")}: ${streak || "—"}
+${tr("reportLogged")}: ${history.length}
+${tr("onTime")}: ${counts.onTime} · ${tr("early")}: ${counts.early} · ${tr("late")}: ${counts.late} · ${tr("missedShort")}: ${counts.missed}
+${tr("reportLast")}: ${last}
 
-دوزهای اخیر:
-${lines.length ? lines.join("\n") : "- هنوز دوزی ثبت نشده"}`;
+${tr("recentDoses")}:
+${lines.length ? lines.join("\n") : tr("noDoseLine")}`;
 }
 
 async function sha256(text: string): Promise<string> {

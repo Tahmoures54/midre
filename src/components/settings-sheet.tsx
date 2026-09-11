@@ -1,6 +1,8 @@
 import { useRef, type ReactNode } from "react";
 import { Bell, BellOff, Download, Upload, Volume2, VolumeX, Vibrate } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { LocaleToggle } from "@/components/locale-toggle";
+import { nagMessageKey, useI18n } from "@/lib/i18n";
 import { APP_VERSION } from "@/lib/med/types";
 import { NAG_OPTIONS, type AppSettings } from "@/lib/med/settings";
 import type { PermissionState } from "@/lib/med/notifications";
@@ -25,7 +27,16 @@ export function SettingsSheet({
   onExport,
   onImport,
 }: Props) {
+  const { t } = useI18n();
   const fileRef = useRef<HTMLInputElement>(null);
+  const notifCopy =
+    permission === "granted"
+      ? t("notifGranted")
+      : permission === "denied"
+        ? t("notifDeniedBody")
+        : permission === "unavailable"
+          ? t("notifUnavailable")
+          : t("notifAsk");
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-bg/80 p-4 sm:items-center" onClick={onClose}>
@@ -38,44 +49,52 @@ export function SettingsSheet({
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 id="settings-title" className="text-lg font-semibold">
-            تنظیمات
+            {t("settings")}
           </h2>
           <Button variant="ghost" size="sm" onClick={onClose}>
-            بستن
+            {t("close")}
           </Button>
         </div>
 
         <section className="space-y-3">
-          <h3 className="text-xs font-medium uppercase tracking-wide text-subtle">هشدار</h3>
+          <h3 className="text-xs font-medium uppercase tracking-wide text-subtle">{t("language")}</h3>
+          <div className="flex items-center justify-between rounded-xl bg-bg px-3 py-3">
+            <p className="text-sm text-fg">{t("language")}</p>
+            <LocaleToggle size="md" />
+          </div>
+        </section>
+
+        <section className="mt-6 space-y-3">
+          <h3 className="text-xs font-medium uppercase tracking-wide text-subtle">{t("settingsAlert")}</h3>
           <ToggleRow
             icon={settings.sound ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
-            label="صدای آلارم"
+            label={t("sound")}
             on={settings.sound}
             onClick={() => onSettings({ sound: !settings.sound })}
           />
           <ToggleRow
             icon={<Vibrate className="size-4" />}
-            label="لرزش دستگاه"
+            label={t("vibrate")}
             on={settings.vibrate}
             onClick={() => onSettings({ vibrate: !settings.vibrate })}
           />
 
           <div className="rounded-xl bg-bg px-3 py-3">
-            <p className="mb-2 text-sm text-fg">تکرار هشدار تا تأیید</p>
+            <p className="mb-2 text-sm text-fg">{t("nagUntil")}</p>
             <div className="flex flex-wrap gap-2">
-              {NAG_OPTIONS.map((opt) => (
+              {NAG_OPTIONS.map((value) => (
                 <button
-                  key={opt.value}
+                  key={value}
                   type="button"
-                  onClick={() => onSettings({ nagSeconds: opt.value })}
+                  onClick={() => onSettings({ nagSeconds: value })}
                   className={cn(
                     "h-10 rounded-lg px-3 text-xs",
-                    settings.nagSeconds === opt.value
+                    settings.nagSeconds === value
                       ? "bg-primary font-medium text-primary-fg"
                       : "bg-surface-2 text-fg ring-1 ring-border",
                   )}
                 >
-                  {opt.label}
+                  {t(nagMessageKey(value))}
                 </button>
               ))}
             </div>
@@ -84,21 +103,13 @@ export function SettingsSheet({
           <div className="rounded-xl bg-bg px-3 py-3">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm text-fg">اعلان مرورگر</p>
-                <p className="mt-1 text-xs leading-relaxed text-muted">
-                  {permission === "granted"
-                    ? "فعال است — اگر برنامه در پس‌زمینه باشد هم خبر می‌دهد."
-                    : permission === "denied"
-                      ? "رد شده. از تنظیمات مرورگر فعال کنید."
-                      : permission === "unavailable"
-                        ? "در این محیط در دسترس نیست. هشدار داخل برنامه کار می‌کند."
-                        : "برای هشدار پس‌زمینه، مجوز بدهید."}
-                </p>
+                <p className="text-sm text-fg">{t("browserNotif")}</p>
+                <p className="mt-1 text-xs leading-relaxed text-muted">{notifCopy}</p>
               </div>
               {permission !== "granted" && permission !== "unavailable" ? (
                 <Button variant="outline" size="sm" onClick={onRequestPermission}>
                   {permission === "denied" ? <BellOff /> : <Bell />}
-                  اعلان
+                  {t("notifBtn")}
                 </Button>
               ) : null}
             </div>
@@ -106,18 +117,16 @@ export function SettingsSheet({
         </section>
 
         <section className="mt-6 space-y-3">
-          <h3 className="text-xs font-medium uppercase tracking-wide text-subtle">داده</h3>
-          <p className="text-xs leading-relaxed text-muted">
-            همه چیز فقط روی همین دستگاه، در IndexedDB ذخیره می‌شود. بازیابی جایگزین فهرست فعلی می‌شود.
-          </p>
+          <h3 className="text-xs font-medium uppercase tracking-wide text-subtle">{t("data")}</h3>
+          <p className="text-xs leading-relaxed text-muted">{t("dataHint")}</p>
           <div className="grid grid-cols-2 gap-2">
             <Button variant="secondary" onClick={onExport}>
               <Download />
-              پشتیبان
+              {t("backup")}
             </Button>
             <Button variant="secondary" onClick={() => fileRef.current?.click()}>
               <Upload />
-              بازیابی
+              {t("restore")}
             </Button>
           </div>
           <input
@@ -133,7 +142,7 @@ export function SettingsSheet({
           />
         </section>
 
-        <p className="mt-6 text-center text-xs text-subtle">نسخه {APP_VERSION} · جایگزین توصیه پزشک نیست</p>
+        <p className="mt-6 text-center text-xs text-subtle">{t("versionFoot", { v: APP_VERSION })}</p>
       </div>
     </div>
   );

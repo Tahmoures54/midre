@@ -1,15 +1,9 @@
+import { dateLocale, useI18n } from "@/lib/i18n";
 import { formatFaTime } from "@/lib/med/medication";
 import { todaysPlan, type TodayItem } from "@/lib/med/schedule";
 import { emptyStockCount, lowStockCount, takenToday } from "@/lib/med/stats";
 import type { Medication } from "@/lib/med/types";
 import { cn } from "@/lib/utils";
-
-const STATE_LABEL: Record<TodayItem["state"], string> = {
-  due: "الان",
-  upcoming: "بعدی",
-  taken: "مصرف شد",
-  skipped: "رد شد",
-};
 
 interface Props {
   medications: Medication[];
@@ -18,16 +12,23 @@ interface Props {
 }
 
 export function TodayBoard({ medications, now, onOpen }: Props) {
+  const { t, locale } = useI18n();
   const plan = todaysPlan(medications, now);
   const due = medications.filter((m) => m.pendingDose).length;
   const taken = takenToday(medications, now);
   const low = lowStockCount(medications);
   const empty = emptyStockCount(medications);
-  const dateLabel = new Date(now).toLocaleDateString("fa-IR", {
+  const dateLabel = new Date(now).toLocaleDateString(dateLocale(locale), {
     weekday: "long",
     day: "numeric",
     month: "long",
   });
+  const stateLabel: Record<TodayItem["state"], string> = {
+    due: t("stateDue"),
+    upcoming: t("stateUpcoming"),
+    taken: t("stateTaken"),
+    skipped: t("stateSkipped"),
+  };
 
   if (medications.length === 0) return null;
 
@@ -35,12 +36,12 @@ export function TodayBoard({ medications, now, onOpen }: Props) {
     <section className="mb-5 rounded-2xl bg-surface p-4 shadow-ring">
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="text-sm font-medium text-fg">{dateLabel}</h2>
-        <p className="text-xs text-muted">برنامه امروز</p>
+        <p className="text-xs text-muted">{t("todayPlan")}</p>
       </div>
       <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-        <Stat label="منتظر تأیید" value={due} warn={due > 0} />
-        <Stat label="مصرف‌شده" value={taken} />
-        <Stat label="کم‌موجودی" value={low + empty} warn={low + empty > 0} />
+        <Stat label={t("statDue")} value={due} warn={due > 0} />
+        <Stat label={t("statTaken")} value={taken} />
+        <Stat label={t("statLow")} value={low + empty} warn={low + empty > 0} />
       </div>
       {plan.length > 0 ? (
         <ol className="mt-4 space-y-1.5">
@@ -49,7 +50,7 @@ export function TodayBoard({ medications, now, onOpen }: Props) {
               <button
                 type="button"
                 onClick={() => onOpen(item.medicationId)}
-                className="flex w-full items-center gap-3 rounded-xl bg-bg px-3 py-2.5 text-right"
+                className="flex w-full items-center gap-3 rounded-xl bg-bg px-3 py-2.5 text-start"
               >
                 <span
                   className={cn(
@@ -57,7 +58,7 @@ export function TodayBoard({ medications, now, onOpen }: Props) {
                     item.state === "due" && "font-medium text-due",
                   )}
                 >
-                  {formatFaTime(item.at)}
+                  {formatFaTime(item.at, locale)}
                 </span>
                 <span className="min-w-0 flex-1 truncate text-sm text-fg">{item.name}</span>
                 <span
@@ -69,14 +70,14 @@ export function TodayBoard({ medications, now, onOpen }: Props) {
                     item.state === "skipped" && "text-subtle",
                   )}
                 >
-                  {STATE_LABEL[item.state]}
+                  {stateLabel[item.state]}
                 </span>
               </button>
             </li>
           ))}
         </ol>
       ) : (
-        <p className="mt-4 text-sm text-muted">برای امروز نوبتی ثبت نشده. تایمر را روشن کنید یا ساعات روزانه بگذارید.</p>
+        <p className="mt-4 text-sm text-muted">{t("todayEmpty")}</p>
       )}
     </section>
   );
