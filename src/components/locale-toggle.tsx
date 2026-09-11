@@ -12,6 +12,7 @@ export function LocaleToggle({ size = "sm" }: { size?: "sm" | "md" }) {
     <div
       role="group"
       aria-label={t("language")}
+      dir="ltr"
       className={cn(
         "inline-flex rounded-full bg-surface p-0.5 ring-1 ring-border",
         size === "md" ? "h-11" : "h-9",
