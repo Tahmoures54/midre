@@ -113,7 +113,7 @@ function Home() {
             تلاش مجدد
           </Button>
         </div>
-        <Toaster dir="rtl" theme="dark" position="top-center" />
+        <Toaster dir="rtl" theme="dark" position="bottom-center" />
       </main>
     );
   }
@@ -311,7 +311,7 @@ function Home() {
         />
       ) : null}
 
-      <Toaster dir="rtl" theme="dark" position="top-center" />
+      <Toaster dir="rtl" theme="dark" position="bottom-center" />
     </main>
   );
 }
