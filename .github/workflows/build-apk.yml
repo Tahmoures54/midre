@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   apk:
-    name: Assemble release APK
+    name: Assemble signed APK
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -37,6 +37,9 @@ jobs:
         with:
           gradle-version: "8.9"
 
+      - name: Create or reuse signing key
+        run: sh scripts/ensure-apk-keystore.sh
+
       - name: Install JS dependencies
         run: npm ci
 
@@ -46,19 +49,34 @@ jobs:
       - name: Pack assets for Android WebView
         run: node scripts/prepare-apk-web.mjs
 
-      - name: Assemble APK
+      - name: Assemble signed APK
         working-directory: android
         run: gradle assembleRelease --no-daemon --stacktrace
 
-      - name: Rename APK
+      - name: Collect APK and signing key
         run: |
           mkdir -p dist
           cp android/app/build/outputs/apk/release/app-release.apk dist/yadavar-daru.apk
-          ls -lh dist/yadavar-daru.apk
+          cp android/signing/yadavar-daru.p12 dist/yadavar-daru.p12
+          cp android/signing/yadavar-daru.pem dist/yadavar-daru.pem
+          {
+            echo "کلید امضای یادآور دارو"
+            echo "این فایل را نگه دارید. بدون همین کلید، نسخه بعدی روی گوشی نصب نمی‌شود مگر برنامه قبلی را پاک کنید."
+            echo
+            echo "keystore: yadavar-daru.p12"
+            echo "certificate: yadavar-daru.pem"
+            echo
+            cat android/signing/keystore.properties
+          } > dist/signing-key.txt
+          ls -lh dist
 
-      - name: Upload APK
+      - name: Upload APK and signing key
         uses: actions/upload-artifact@v4
         with:
           name: yadavar-daru-apk
-          path: dist/yadavar-daru.apk
+          path: |
+            dist/yadavar-daru.apk
+            dist/yadavar-daru.p12
+            dist/yadavar-daru.pem
+            dist/signing-key.txt
           if-no-files-found: error

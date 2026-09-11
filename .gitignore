@@ -13,3 +13,5 @@ android/app/src/main/assets/www/*
 *.aab
 *.keystore
 *.jks
+*.p12
+!android/signing/yadavar-daru.p12
