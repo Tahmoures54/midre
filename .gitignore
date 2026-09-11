@@ -3,3 +3,13 @@ node_modules/
 .github_repo
 .env
 .env.*
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/app/src/main/assets/www/*
+!android/app/src/main/assets/www/.gitkeep
+*.apk
+*.aab
+*.keystore
+*.jks
