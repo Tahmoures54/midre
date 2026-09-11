@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useI18n, type MessageKey } from "@/lib/i18n";
 import type { MedDraft } from "@/lib/med/store";
 import type { AccentId, Medication, ScheduleKind } from "@/lib/med/types";
 import { ACCENTS } from "@/lib/med/types";
@@ -9,11 +10,11 @@ import { normalizeTimes } from "@/lib/med/schedule";
 import { cn } from "@/lib/utils";
 
 const HOUR_PRESETS = [4, 6, 8, 12, 24, 48, 72];
-const TIME_PRESETS: { label: string; times: string[] }[] = [
-  { label: "صبح", times: ["08:00"] },
-  { label: "صبح و شب", times: ["08:00", "20:00"] },
-  { label: "سه‌بار", times: ["08:00", "14:00", "20:00"] },
-  { label: "چهاربار", times: ["08:00", "12:00", "16:00", "20:00"] },
+const TIME_PRESETS: { key: MessageKey; times: string[] }[] = [
+  { key: "presetMorning", times: ["08:00"] },
+  { key: "presetTwice", times: ["08:00", "20:00"] },
+  { key: "presetThrice", times: ["08:00", "14:00", "20:00"] },
+  { key: "presetFour", times: ["08:00", "12:00", "16:00", "20:00"] },
 ];
 
 const ACCENT_DOT: Record<AccentId, string> = {
@@ -23,11 +24,11 @@ const ACCENT_DOT: Record<AccentId, string> = {
   slate: "bg-slate",
 };
 
-const ACCENT_LABEL: Record<AccentId, string> = {
-  sage: "سبز",
-  terra: "خاکی",
-  olive: "زیتونی",
-  slate: "سنگی",
+const ACCENT_KEY: Record<AccentId, MessageKey> = {
+  sage: "accentSage",
+  terra: "accentTerra",
+  olive: "accentOlive",
+  slate: "accentSlate",
 };
 
 interface Props {
@@ -37,6 +38,7 @@ interface Props {
 }
 
 export function MedicationForm({ initial, onSubmit, onCancel }: Props) {
+  const { t } = useI18n();
   const isEdit = Boolean(initial?.id);
   const [name, setName] = useState(initial?.name ?? "");
   const [condition, setCondition] = useState(initial?.condition ?? "");
@@ -82,16 +84,16 @@ export function MedicationForm({ initial, onSubmit, onCancel }: Props) {
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !dosage.trim()) return setError("نام دارو و دوز را وارد کنید.");
+    if (!name.trim() || !dosage.trim()) return setError(t("formNeedNameDose"));
     const qty = Number(quantity);
     if (!Number.isFinite(qty) || qty < 0 || (!isEdit && qty <= 0)) {
-      return setError(isEdit ? "تعداد نمی‌تواند منفی باشد." : "تعداد باید بیشتر از صفر باشد.");
+      return setError(isEdit ? t("formQtyNeg") : t("formQtyZero"));
     }
     const cleanedTimes = normalizeTimes(times);
-    if (kind === "times" && cleanedTimes.length === 0) return setError("حداقل یک ساعت مصرف اضافه کنید.");
+    if (kind === "times" && cleanedTimes.length === 0) return setError(t("formNeedTime"));
     const intervalHours = hours ?? Number(custom);
     if (kind === "interval" && (!Number.isFinite(intervalHours) || intervalHours <= 0)) {
-      return setError("بازه یادآوری معتبر نیست.");
+      return setError(t("formBadInterval"));
     }
     onSubmit({
       name: name.trim(),
@@ -109,7 +111,7 @@ export function MedicationForm({ initial, onSubmit, onCancel }: Props) {
 
   const addTime = () => {
     const next = normalizeTimes([...times, newTime]);
-    if (next.length > 8) return setError("حداکثر ۸ نوبت در روز.");
+    if (next.length > 8) return setError(t("formMaxTimes"));
     setTimes(next);
     setError("");
   };
@@ -117,8 +119,8 @@ export function MedicationForm({ initial, onSubmit, onCancel }: Props) {
   return (
     <section className="rounded-2xl bg-surface p-5 shadow-ring">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold">{isEdit ? "ویرایش دارو" : "افزودن دارو"}</h2>
-        <Button variant="ghost" size="icon" className="size-10" onClick={onCancel} aria-label="بستن">
+        <h2 className="text-lg font-semibold">{isEdit ? t("formEdit") : t("formAdd")}</h2>
+        <Button variant="ghost" size="icon" className="size-10" onClick={onCancel} aria-label={t("close")}>
           <X />
         </Button>
       </div>
@@ -128,39 +130,39 @@ export function MedicationForm({ initial, onSubmit, onCancel }: Props) {
             {error}
           </p>
         ) : null}
-        <Field label="نام دارو" htmlFor="med-name">
-          <Input id="med-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="مثلاً آموکسی‌سیلین" autoFocus />
+        <Field label={t("formName")} htmlFor="med-name">
+          <Input id="med-name" value={name} onChange={(e) => setName(e.target.value)} placeholder={t("formNamePh")} autoFocus />
         </Field>
-        <Field label="بیماری مرتبط (اختیاری)" htmlFor="med-condition">
-          <Input id="med-condition" value={condition} onChange={(e) => setCondition(e.target.value)} placeholder="مثلاً فشار خون" />
+        <Field label={t("formCondition")} htmlFor="med-condition">
+          <Input id="med-condition" value={condition} onChange={(e) => setCondition(e.target.value)} placeholder={t("formConditionPh")} />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="دوز" htmlFor="med-dosage">
-            <Input id="med-dosage" value={dosage} onChange={(e) => setDosage(e.target.value)} placeholder="۵۰۰ mg" />
+          <Field label={t("formDose")} htmlFor="med-dosage">
+            <Input id="med-dosage" value={dosage} onChange={(e) => setDosage(e.target.value)} placeholder="500 mg" />
           </Field>
-          <Field label="تعداد" htmlFor="med-quantity">
+          <Field label={t("formQty")} htmlFor="med-quantity">
             <Input
               id="med-quantity"
               type="number"
               min={isEdit ? 0 : 1}
               value={quantity}
               onChange={(e) => setQuantity(e.target.value)}
-              placeholder="۳۰"
+              placeholder="30"
             />
           </Field>
         </div>
-        <Field label="یادداشت مصرف (اختیاری)" htmlFor="med-notes">
-          <Input id="med-notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="با غذا · ناشتا · قبل خواب" />
+        <Field label={t("formNotes")} htmlFor="med-notes">
+          <Input id="med-notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t("formNotesPh")} />
         </Field>
 
         <div>
-          <p className="mb-2 text-sm text-muted">رنگ کارت</p>
+          <p className="mb-2 text-sm text-muted">{t("formColor")}</p>
           <div className="flex gap-2">
             {ACCENTS.map((id) => (
               <button
                 key={id}
                 type="button"
-                aria-label={ACCENT_LABEL[id]}
+                aria-label={t(ACCENT_KEY[id])}
                 aria-pressed={accent === id}
                 onClick={() => setAccent(id)}
                 className={cn(
@@ -174,10 +176,10 @@ export function MedicationForm({ initial, onSubmit, onCancel }: Props) {
         </div>
 
         <div>
-          <p className="mb-2 text-sm text-muted">زمان‌بندی</p>
+          <p className="mb-2 text-sm text-muted">{t("formSchedule")}</p>
           <div className="grid grid-cols-2 gap-2">
-            <KindBtn active={kind === "times"} onClick={() => setKind("times")} label="ساعات روزانه" hint="مثل ۸ صبح و ۸ شب" />
-            <KindBtn active={kind === "interval"} onClick={() => setKind("interval")} label="هر چند ساعت" hint="از لحظه شروع" />
+            <KindBtn active={kind === "times"} onClick={() => setKind("times")} label={t("formTimes")} hint={t("formTimesHint")} />
+            <KindBtn active={kind === "interval"} onClick={() => setKind("interval")} label={t("formInterval")} hint={t("formIntervalHint")} />
           </div>
         </div>
 
@@ -186,7 +188,7 @@ export function MedicationForm({ initial, onSubmit, onCancel }: Props) {
             <div className="flex flex-wrap gap-2">
               {TIME_PRESETS.map((preset) => (
                 <button
-                  key={preset.label}
+                  key={preset.key}
                   type="button"
                   onClick={() => setTimes(preset.times)}
                   className={cn(
@@ -196,20 +198,20 @@ export function MedicationForm({ initial, onSubmit, onCancel }: Props) {
                       : "bg-surface-2 text-fg ring-1 ring-border",
                   )}
                 >
-                  {preset.label}
+                  {t(preset.key)}
                 </button>
               ))}
             </div>
             <div className="flex flex-wrap gap-2">
-              {times.map((t) => (
+              {times.map((clock) => (
                 <button
-                  key={t}
+                  key={clock}
                   type="button"
-                  onClick={() => setTimes(times.filter((x) => x !== t))}
+                  onClick={() => setTimes(times.filter((x) => x !== clock))}
                   className="rounded-full bg-bg px-3 py-1.5 text-xs text-fg ring-1 ring-border"
-                  aria-label={`حذف ${t}`}
+                  aria-label={t("removeTime", { t: clock })}
                 >
-                  {t} ×
+                  {clock} ×
                 </button>
               ))}
             </div>
@@ -223,13 +225,13 @@ export function MedicationForm({ initial, onSubmit, onCancel }: Props) {
                 className="flex-1"
               />
               <Button type="button" variant="secondary" onClick={addTime}>
-                افزودن ساعت
+                {t("addTime")}
               </Button>
             </div>
           </div>
         ) : (
           <div>
-            <p className="mb-2 text-sm text-muted">یادآوری هر چند ساعت؟</p>
+            <p className="mb-2 text-sm text-muted">{t("formHowOften")}</p>
             <div className="grid grid-cols-4 gap-2">
               {HOUR_PRESETS.map((v) => (
                 <button
@@ -242,7 +244,7 @@ export function MedicationForm({ initial, onSubmit, onCancel }: Props) {
                       : "h-11 rounded-lg bg-surface-2 text-sm text-fg ring-1 ring-border hover:bg-bg"
                   }
                 >
-                  {v}س
+                  {t("hoursShort", { n: v })}
                 </button>
               ))}
               <button
@@ -254,12 +256,12 @@ export function MedicationForm({ initial, onSubmit, onCancel }: Props) {
                     : "h-11 rounded-lg bg-surface-2 text-sm text-fg ring-1 ring-dashed ring-border hover:bg-bg"
                 }
               >
-                سفارشی
+                {t("formCustom")}
               </button>
             </div>
             {hours === null ? (
               <div className="mt-3">
-                <Field label="بازه سفارشی (ساعت)" htmlFor="custom-hours">
+                <Field label={t("formCustomHours")} htmlFor="custom-hours">
                   <Input
                     id="custom-hours"
                     type="number"
@@ -267,7 +269,7 @@ export function MedicationForm({ initial, onSubmit, onCancel }: Props) {
                     step={0.05}
                     value={custom}
                     onChange={(e) => setCustom(e.target.value)}
-                    placeholder="۰٫۰۵ یعنی ۳ دقیقه"
+                    placeholder={t("formCustomPh")}
                   />
                 </Field>
               </div>
@@ -282,10 +284,10 @@ export function MedicationForm({ initial, onSubmit, onCancel }: Props) {
             onChange={(e) => setStartImmediately(e.target.checked)}
             className="size-4 accent-primary"
           />
-          {isEdit ? "شروع تایمر با ذخیره" : "شروع شمارش بلافاصله"}
+          {isEdit ? t("formStartSave") : t("formStartNow")}
         </label>
         <Button type="submit" className="h-12 w-full">
-          {isEdit ? "ذخیره تغییرات" : "افزودن دارو"}
+          {isEdit ? t("formSave") : t("formAdd")}
         </Button>
       </form>
     </section>
@@ -298,7 +300,7 @@ function KindBtn({ active, onClick, label, hint }: { active: boolean; onClick: (
       type="button"
       onClick={onClick}
       className={cn(
-        "rounded-xl px-3 py-3 text-right ring-1",
+        "rounded-xl px-3 py-3 text-start ring-1",
         active ? "bg-primary/12 text-fg ring-primary/40" : "bg-surface-2 text-fg ring-border",
       )}
     >

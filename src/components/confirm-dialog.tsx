@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/lib/i18n";
 
 interface Props {
   title: string;
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export function ConfirmDialog({ title, body, confirmLabel, danger, onConfirm, onCancel }: Props) {
+  const { t } = useI18n();
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-bg/80 p-4" onClick={onCancel}>
       <div
@@ -28,7 +30,7 @@ export function ConfirmDialog({ title, body, confirmLabel, danger, onConfirm, on
             {confirmLabel}
           </Button>
           <Button variant="secondary" className="flex-1" onClick={onCancel}>
-            انصراف
+            {t("cancel")}
           </Button>
         </div>
       </div>

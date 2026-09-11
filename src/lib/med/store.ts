@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { toast } from "sonner";
+import { t } from "@/lib/i18n";
 import type { AccentId, Medication, ScheduleKind } from "./types";
 import {
   addMedication,
@@ -123,7 +124,7 @@ export const useMedStore = create<MedStore>((set, get) => ({
     } catch (error) {
       set({
         bootDone: true,
-        bootError: error instanceof Error ? error.message : "خطا در بارگذاری داده‌ها",
+        bootError: error instanceof Error ? error.message : t("loadError"),
       });
     }
   },
@@ -151,7 +152,7 @@ export const useMedStore = create<MedStore>((set, get) => ({
       history: [],
     });
     set((s) => ({ medications: sortMedications([...s.medications, created]) }));
-    toast.success(`${created.name} اضافه شد`);
+    toast.success(t("added", { name: created.name }));
   },
 
   save: async (id, draft) => {
@@ -194,7 +195,7 @@ export const useMedStore = create<MedStore>((set, get) => ({
     }
     await persist(next);
     set((s) => ({ medications: sortMedications(s.medications.map((m) => (m.id === id ? next : m))) }));
-    toast.success("تغییرات ذخیره شد");
+    toast.success(t("saved"));
   },
 
   remove: async (id) => {
@@ -205,7 +206,7 @@ export const useMedStore = create<MedStore>((set, get) => ({
       return { medications, alertId };
     });
     if (get().alertId === null) stopAlarm();
-    toast.success("دارو حذف شد");
+    toast.success(t("removed"));
   },
 
   take: async (id) => {
@@ -222,7 +223,7 @@ export const useMedStore = create<MedStore>((set, get) => ({
       alertId,
     }));
     if (updated.quantity <= 5) {
-      toast.message(updated.quantity === 0 ? "موجودی تمام شد — شارژ کنید" : `موجودی ${updated.quantity} عدد`);
+      toast.message(updated.quantity === 0 ? t("stockEmpty") : t("stockLeft", { n: updated.quantity }));
     }
   },
 
@@ -281,7 +282,7 @@ export const useMedStore = create<MedStore>((set, get) => ({
     const updated = applyRefill(current, add);
     await persist(updated);
     set((s) => ({ medications: s.medications.map((m) => (m.id === id ? updated : m)) }));
-    toast.success(`موجودی ${updated.quantity} عدد شد`);
+    toast.success(t("stockNow", { n: updated.quantity }));
   },
 
   tick: () => {
@@ -311,8 +312,8 @@ export const useMedStore = create<MedStore>((set, get) => ({
   requestPermission: async () => {
     const permission = await requestNotificationPermission();
     set({ permission });
-    if (permission === "granted") toast.success("اعلان‌ها فعال شد");
-    else if (permission === "denied") toast.error("مجوز اعلان رد شد");
+    if (permission === "granted") toast.success(t("notifOn"));
+    else if (permission === "denied") toast.error(t("notifDenied"));
   },
 
   dismissAlert: () => {
@@ -331,7 +332,7 @@ export const useMedStore = create<MedStore>((set, get) => ({
     a.download = `medireminder-backup-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    toast.success("فایل پشتیبان آماده شد");
+    toast.success(t("backupReady"));
   },
 
   importJson: async (file) => {
@@ -339,18 +340,18 @@ export const useMedStore = create<MedStore>((set, get) => ({
       const payload = JSON.parse(await file.text()) as BackupPayload;
       await importBackup(payload);
       await get().load();
-      toast.success("پشتیبان بازیابی شد");
+      toast.success(t("backupRestored"));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "بازیابی انجام نشد");
+      toast.error(error instanceof Error ? error.message : t("backupFailed"));
     }
   },
 
   addDemo: async () => {
     await get().add({
-      name: "نمونه — ویتامین D",
-      condition: "دمو برای تست یادآوری",
-      dosage: "۱۰۰۰ IU",
-      notes: "با غذا مصرف شود",
+      name: t("demoName"),
+      condition: t("demoCondition"),
+      dosage: t("demoDose"),
+      notes: t("demoNotes"),
       accent: "olive",
       scheduleKind: "interval",
       intervalHours: 2 / 60,

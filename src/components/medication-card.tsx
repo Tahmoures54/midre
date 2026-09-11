@@ -2,6 +2,7 @@ import { BarChart3, Pause, Pencil, Play, RotateCcw, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { useI18n } from "@/lib/i18n";
 import { formatCountdown, formatFaTime, formatInterval, formatTimesLabel, remainingSeconds, progressDenominator } from "@/lib/med/medication";
 import type { AccentId, Medication } from "@/lib/med/types";
 import { cn } from "@/lib/utils";
@@ -42,6 +43,7 @@ export function MedicationCard({
   onSkip,
   onRefill,
 }: Props) {
+  const { t, locale } = useI18n();
   const due = m.pendingDose;
   const running = m.running && !due;
   const remaining = remainingSeconds(m, now);
@@ -49,7 +51,9 @@ export function MedicationCard({
   const progress = due ? 100 : running ? Math.min(100, Math.max(0, ((denom - remaining) / denom) * 100)) : 0;
   const empty = m.quantity <= 0;
   const low = !empty && m.quantity <= 5;
-  const scheduleLabel = m.scheduleKind === "times" ? formatTimesLabel(m.times) : `هر ${formatInterval(m.interval)}`;
+  const clock = formatCountdown(remaining, locale);
+  const scheduleLabel =
+    m.scheduleKind === "times" ? formatTimesLabel(m.times, locale) : t("every", { interval: formatInterval(m.interval, locale) });
 
   return (
     <article
@@ -72,7 +76,7 @@ export function MedicationCard({
               )}
             >
               <span className={cn("size-1.5 rounded-full", due ? "bg-due" : running ? "bg-primary" : "bg-subtle")} />
-              {due ? "منتظر تأیید" : running ? "در حال شمارش" : "متوقف"}
+              {due ? t("waiting") : running ? t("counting") : t("paused")}
             </Badge>
           </div>
           <h3 className="text-xl font-semibold tracking-tight text-fg text-balance">{m.name}</h3>
@@ -80,10 +84,10 @@ export function MedicationCard({
           {m.notes ? <p className="mt-1 truncate text-xs text-subtle">{m.notes}</p> : null}
         </div>
         <div className="flex shrink-0 gap-1">
-          <Button variant="ghost" size="icon" className="size-10" onClick={onEdit} aria-label="ویرایش">
+          <Button variant="ghost" size="icon" className="size-10" onClick={onEdit} aria-label={t("edit")}>
             <Pencil />
           </Button>
-          <Button variant="ghost" size="icon" className="size-10" onClick={onReport} aria-label="گزارش">
+          <Button variant="ghost" size="icon" className="size-10" onClick={onReport} aria-label={t("report")}>
             <BarChart3 />
           </Button>
         </div>
@@ -99,27 +103,28 @@ export function MedicationCard({
             low && !empty && "text-terracotta ring-terracotta/30",
           )}
         >
-          {m.quantity} عدد{empty ? " · تمام" : low ? " · کم" : ""}
+          {t("pills", { n: m.quantity })}
+          {empty ? t("pillsEmpty") : low ? t("pillsLow") : ""}
         </span>
       </div>
 
       <div className={cn("mt-4 rounded-xl bg-bg px-4 py-5 text-center", due && "bg-due/10")}>
         {due ? (
           <>
-            <p className="text-2xl font-semibold tracking-tight text-due">زمان مصرف</p>
-            <p className="mt-1 text-sm text-muted">پس از مصرف، تأیید کنید. بستن هشدار به معنی مصرف نیست.</p>
+            <p className="text-2xl font-semibold tracking-tight text-due">{t("timeToTake")}</p>
+            <p className="mt-1 text-sm text-muted">{t("confirmAfter")}</p>
           </>
         ) : (
           <>
             <p
               className={cn("font-display text-5xl font-medium tabular-nums tracking-tight", running ? "text-primary" : "text-subtle")}
               role="timer"
-              aria-label={`${formatCountdown(remaining)} باقی‌مانده`}
+              aria-label={t("remaining", { clock })}
             >
-              {formatCountdown(remaining)}
+              {clock}
             </p>
             <p className="mt-1 text-xs text-muted">
-              {running ? `دوز بعدی حدود ${formatFaTime(m.nextDoseAt)}` : "تایمر متوقف است"}
+              {running ? t("nextAround", { time: formatFaTime(m.nextDoseAt, locale) }) : t("timerStopped")}
             </p>
           </>
         )}
@@ -130,25 +135,25 @@ export function MedicationCard({
       {due ? (
         <div className="mt-4 grid grid-cols-2 gap-2">
           <Button onClick={onTake} className="h-12">
-            مصرف کردم
+            {t("tookIt")}
           </Button>
           <Button variant="secondary" onClick={onSnooze} className="h-12">
-            ۱۰ دقیقه
+            {t("snooze10")}
           </Button>
           <Button variant="outline" onClick={onSkip} className="col-span-2 h-11 text-muted">
-            این دوز را رد کن
+            {t("skipDose")}
           </Button>
         </div>
       ) : (
         <div className="mt-4 grid grid-cols-[1fr_auto_auto] gap-2">
           <Button variant={running ? "secondary" : "default"} onClick={onToggle} className="h-12">
             {running ? <Pause /> : <Play />}
-            {running ? "توقف" : "شروع"}
+            {running ? t("pause") : t("start")}
           </Button>
-          <Button variant="secondary" size="icon" className="size-12" onClick={onReset} aria-label="ریست">
+          <Button variant="secondary" size="icon" className="size-12" onClick={onReset} aria-label={t("reset")}>
             <RotateCcw />
           </Button>
-          <Button variant="ghost" size="icon" className="size-12 text-due" onClick={onDelete} aria-label="حذف">
+          <Button variant="ghost" size="icon" className="size-12 text-due" onClick={onDelete} aria-label={t("delete")}>
             <Trash2 />
           </Button>
         </div>
@@ -156,7 +161,7 @@ export function MedicationCard({
 
       {low || empty ? (
         <Button variant="outline" className="mt-2 h-11 w-full" onClick={onRefill}>
-          شارژ موجودی +۳۰
+          {t("refill")}
         </Button>
       ) : null}
     </article>

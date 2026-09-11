@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n";
 import type { Medication } from "./types";
 
 export type PermissionState = NotificationPermission | "unavailable";
@@ -21,8 +22,8 @@ export function notifyDue(med: Medication, followUp = false) {
   if (typeof window === "undefined" || !("Notification" in window)) return;
   if (Notification.permission !== "granted") return;
   try {
-    const n = new Notification(followUp ? "یادآوری مجدد دارو" : "زمان مصرف دارو", {
-      body: `${med.name} — ${med.dosage}\nپس از مصرف، تأیید کنید.`,
+    const n = new Notification(followUp ? t("notifyAgain") : t("notifyTitle"), {
+      body: t("notifyBody", { name: med.name, dose: med.dosage }),
       tag: `med-${med.id}`,
       requireInteraction: true,
     });

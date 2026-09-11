@@ -29,6 +29,11 @@
   --shadow-ring-due: 0 0 0 1px rgb(196 92 74 / 45%);
 }
 
+html[lang="en"] {
+  --font-sans: "Figtree", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Figtree", "Segoe UI", system-ui, sans-serif;
+}
+
 @layer base {
   html {
     -webkit-font-smoothing: antialiased;

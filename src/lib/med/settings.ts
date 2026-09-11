@@ -6,13 +6,7 @@ export interface AppSettings {
   nagSeconds: number;
 }
 
-export const NAG_OPTIONS = [
-  { value: 30, label: "۳۰ ثانیه" },
-  { value: 45, label: "۴۵ ثانیه" },
-  { value: 60, label: "۱ دقیقه" },
-  { value: 120, label: "۲ دقیقه" },
-  { value: 300, label: "۵ دقیقه" },
-] as const;
+export const NAG_OPTIONS = [30, 45, 60, 120, 300] as const;
 
 export const DEFAULT_SETTINGS: AppSettings = {
   sound: true,
@@ -30,7 +24,7 @@ export function loadSettings(): AppSettings {
     return {
       sound: parsed.sound !== false,
       vibrate: parsed.vibrate !== false,
-      nagSeconds: NAG_OPTIONS.some((o) => o.value === nag) ? nag : DEFAULT_SETTINGS.nagSeconds,
+      nagSeconds: NAG_OPTIONS.some((value) => value === nag) ? nag : DEFAULT_SETTINGS.nagSeconds,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };

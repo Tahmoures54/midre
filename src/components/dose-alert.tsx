@@ -1,6 +1,7 @@
 import { useEffect, useId } from "react";
 import { Pill } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/lib/i18n";
 import type { Medication } from "@/lib/med/types";
 
 interface Props {
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export function DoseAlert({ medication, queueLength = 1, onTake, onSnooze, onSkip, onLater }: Props) {
+  const { t } = useI18n();
   const titleId = useId();
   const descId = useId();
   const empty = medication.quantity <= 0;
@@ -48,40 +50,38 @@ export function DoseAlert({ medication, queueLength = 1, onTake, onSnooze, onSki
           </span>
         </div>
         {queueLength > 1 ? (
-          <p className="mb-2 text-center text-xs text-muted">{queueLength} دارو منتظر تأیید</p>
+          <p className="mb-2 text-center text-xs text-muted">{t("alertQueue", { n: queueLength })}</p>
         ) : null}
         <h2 id={titleId} className="text-center text-2xl font-semibold tracking-tight text-fg">
-          زمان مصرف {medication.name}
+          {t("alertTitle", { name: medication.name })}
         </h2>
         <p id={descId} className="mt-2 text-center text-sm leading-relaxed text-muted text-pretty">
-          دوز {medication.dosage} فرا رسیده است.
-          {medication.notes ? ` ${medication.notes}.` : ""} هشدار تا تأیید یا اسنوز ادامه می‌یابد.
+          {t("alertBody", { dose: medication.dosage })}
+          {medication.notes ? ` ${medication.notes}.` : ""} {t("alertNag")}
         </p>
         {empty ? (
-          <p className="mt-3 rounded-xl bg-due/10 px-3 py-2 text-center text-xs text-due">
-            موجودی صفر است. بعد از تهیه دارو، موجودی را شارژ کنید — مصرف را همچنان می‌توانید ثبت کنید.
-          </p>
+          <p className="mt-3 rounded-xl bg-due/10 px-3 py-2 text-center text-xs text-due">{t("alertEmpty")}</p>
         ) : null}
         {medication.snoozeCount >= 3 ? (
-          <p className="mt-3 text-center text-xs text-terracotta">چند بار به تعویق رفته. بهتر است الان مصرف شود.</p>
+          <p className="mt-3 text-center text-xs text-terracotta">{t("alertSnoozed")}</p>
         ) : null}
         <div className="mt-6 flex flex-col gap-2">
           <Button autoFocus onClick={onTake} className="h-12">
-            مصرف کردم
+            {t("tookIt")}
           </Button>
           <div className="grid grid-cols-2 gap-2">
             <Button variant="secondary" className="h-11" onClick={() => onSnooze(10)}>
-              ۱۰ دقیقه
+              {t("snooze10")}
             </Button>
             <Button variant="secondary" className="h-11" onClick={() => onSnooze(30)}>
-              ۳۰ دقیقه
+              {t("snooze30")}
             </Button>
           </div>
           <Button variant="outline" className="h-11 text-muted" onClick={onSkip}>
-            این دوز را رد کن
+            {t("skipDose")}
           </Button>
           <Button variant="ghost" className="h-11 text-muted" onClick={onLater}>
-            بعداً
+            {t("later")}
           </Button>
         </div>
       </div>

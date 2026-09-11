@@ -1,3 +1,4 @@
+import { dateLocale, getLocale, t, type Locale } from "../i18n.ts";
 import type { AccentId, DoseStatus, HistoryRecord, Medication } from "./types.ts";
 import { ACCENTS, MAX_HISTORY_RECORDS } from "./types.ts";
 import {
@@ -20,51 +21,51 @@ export function remainingSeconds(m: Pick<Medication, "running" | "nextDoseAt" | 
   return Math.max(0, Math.ceil((m.nextDoseAt - now) / 1000));
 }
 
-export function formatCountdown(seconds: number): string {
+export function formatCountdown(seconds: number, locale: Locale = getLocale()): string {
   const s = Math.max(0, Math.floor(seconds));
   const days = Math.floor(s / 86400);
   const hours = Math.floor((s % 86400) / 3600);
   const minutes = Math.floor((s % 3600) / 60);
   const secs = s % 60;
   const clock = [hours, minutes, secs].map((n) => String(n).padStart(2, "0")).join(":");
-  if (days > 0) return `${days} روز ${clock}`;
+  if (days > 0) return `${days} ${t("day", undefined, locale)} ${clock}`;
   return clock;
 }
 
-export function formatFaTime(ts?: number): string {
+export function formatFaTime(ts?: number, locale: Locale = getLocale()): string {
   if (!ts) return "—";
-  return new Date(ts).toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" });
+  return new Date(ts).toLocaleTimeString(dateLocale(locale), { hour: "2-digit", minute: "2-digit" });
 }
 
-export function formatFaDateTime(ts: number): string {
+export function formatFaDateTime(ts: number, locale: Locale = getLocale()): string {
   const date = new Date(ts);
   const now = new Date();
-  const time = date.toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" });
+  const time = date.toLocaleTimeString(dateLocale(locale), { hour: "2-digit", minute: "2-digit" });
   const sameDay =
     date.getDate() === now.getDate() &&
     date.getMonth() === now.getMonth() &&
     date.getFullYear() === now.getFullYear();
-  return sameDay ? `امروز ${time}` : `${date.toLocaleDateString("fa-IR")} ${time}`;
+  return sameDay ? t("today", { time }, locale) : `${date.toLocaleDateString(dateLocale(locale))} ${time}`;
 }
 
-export function formatInterval(seconds: number): string {
+export function formatInterval(seconds: number, locale: Locale = getLocale()): string {
   if (seconds < 3600) {
     const m = Math.max(1, Math.round(seconds / 60));
-    return `${m} دقیقه`;
+    return `${m} ${t("minute", undefined, locale)}`;
   }
   const h = seconds / 3600;
-  if (Number.isInteger(h)) return `${h} ساعت`;
-  return `${h.toFixed(1)} ساعت`;
+  if (Number.isInteger(h)) return `${h} ${t("hour", undefined, locale)}`;
+  return `${h.toFixed(1)} ${t("hour", undefined, locale)}`;
 }
 
-export function formatTimesLabel(times: string[]): string {
-  if (!times.length) return "ساعات مشخص";
+export function formatTimesLabel(times: string[], locale: Locale = getLocale()): string {
+  if (!times.length) return t("clockTimes", undefined, locale);
   return times
-    .map((t) => {
-      const [hh, mm] = t.split(":");
+    .map((clock) => {
+      const [hh, mm] = clock.split(":");
       const d = new Date();
       d.setHours(Number(hh), Number(mm), 0, 0);
-      return d.toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" });
+      return d.toLocaleTimeString(dateLocale(locale), { hour: "2-digit", minute: "2-digit" });
     })
     .join(" · ");
 }
@@ -228,7 +229,7 @@ export function sanitizeMedication(raw: Partial<Medication> & { name?: string })
   const now = Date.now();
   return {
     id: raw.id,
-    name: String(raw.name || "").trim() || "دارو",
+    name: String(raw.name || "").trim() || t("unnamed"),
     condition: String(raw.condition || "").trim(),
     dosage: String(raw.dosage || "").trim() || "—",
     notes: String(raw.notes || "").trim(),

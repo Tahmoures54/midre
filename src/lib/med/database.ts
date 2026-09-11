@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n";
 import { SCHEMA_VERSION, type BackupPayload, type Medication } from "./types";
 import { sanitizeMedication } from "./medication";
 
@@ -73,7 +74,7 @@ export async function exportBackup(): Promise<BackupPayload> {
 
 export async function importBackup(payload: BackupPayload): Promise<void> {
   if (!payload || !Array.isArray(payload.medications)) {
-    throw new Error("فایل پشتیبان نامعتبر است");
+    throw new Error(t("backupInvalid"));
   }
   const db = await openDb();
   await new Promise<void>((resolve, reject) => {

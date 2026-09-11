@@ -41,12 +41,12 @@ export interface DayBucket {
   skipped: number;
 }
 
-export function lastNDays(history: HistoryRecord[], days: number, now = Date.now()): DayBucket[] {
+export function lastNDays(history: HistoryRecord[], days: number, now = Date.now(), locale = "fa-IR"): DayBucket[] {
   const todayStart = startOfLocalDay(now);
   const buckets: DayBucket[] = [];
   for (let i = days - 1; i >= 0; i--) {
     const start = todayStart - i * 86_400_000;
-    const label = new Date(start).toLocaleDateString("fa-IR", { weekday: "short" });
+    const label = new Date(start).toLocaleDateString(locale, { weekday: "short" });
     const rows = history.filter((h) => sameLocalDay(h.takenAt, start));
     buckets.push({
       start,
